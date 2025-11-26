@@ -1,5 +1,5 @@
 # recipe for plotting a PointCloud. Assumes 2D boundary_points 
-@recipe function plot(cloud::BoundaryData; fields = false, outward_normals = true)
+@recipe function plot(cloud::BoundaryData; fields = false, outward_normals = true, interior_points = true)
     # Set default attributes
     markershape --> :circle
     legend --> false
@@ -44,11 +44,13 @@
         (bx, by)
     end
 
+    if interior_points
     @series begin
         label --> "Interior points"
         seriestype --> :scatter
         markersize --> 6.0
         (ix, iy)
+    end
     end
 
     if outward_normals
