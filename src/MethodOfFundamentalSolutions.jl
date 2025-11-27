@@ -5,6 +5,7 @@ using LinearAlgebra
 using BlockArrays: mortar
 using StaticArrays: SVector
 using MultipleScattering
+using SpecialFunctions: hankelh1,besselj
 
 import MultipleScattering: PhysicalMedium, ScalarMedium, spatial_dimension, field_dimension, Acoustic, Shape, Box, bounding_box, points_in_shape, cartesian_to_radial_coordinates, radial_to_cartesian_transform, cartesian_to_radial_transform, field
 export cartesian_to_radial_coordinates, radial_to_cartesian_transform, cartesian_to_radial_transform
