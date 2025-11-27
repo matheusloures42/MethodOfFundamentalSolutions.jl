@@ -32,7 +32,7 @@ export FieldResult, FundamentalSolution
 export field # types
 include("results.jl")
 
-export DisplacementType, TractionType, Elastostatic, Acoustic # types
+export DisplacementType, TractionType, Elastostatic, Acoustic, DirichletType, NeumannType # types
 export ParticularGravity # types
 include("physics/elastic.jl")
 include("physics/acoustic.jl")
