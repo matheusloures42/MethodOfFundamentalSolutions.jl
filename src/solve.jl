@@ -43,29 +43,31 @@ struct Simulation{S <: AbstractSolver, Dim, P<:PhysicalMedium{Dim}, PS <:Particu
     boundary_data::BD
     particular_solution::PS
     source_positions::Vector{SVector{Dim,Float64}}
+    ω::Float64
 end
 
 function Simulation(medium::P, bd::BD; 
         solver::S = TikhonovSolver(),
         particular_solution::PS = NoParticularSolution(),
-        source_positions = source_positions(bd; relative_source_distance = 1.2) 
+        source_positions = source_positions(bd; relative_source_distance = 1.2),
+        ω::Float64 = 2pi * 1.0 
     ) where {
         S <: AbstractSolver, Dim, 
         P <: PhysicalMedium{Dim}, PS <: ParticularSolution, 
         BD <: BoundaryData{<:FieldType,Dim}
     }
 
-    return Simulation{S,Dim,P,PS,BD}(solver, medium, bd, particular_solution, source_positions)
+    return Simulation{S,Dim,P,PS,BD}(solver, medium, bd, particular_solution, source_positions, ω)
 end
 
 system_matrix(sim::Simulation) = system_matrix(sim.source_positions, sim.medium, sim.boundary_data)
 
-function system_matrix(source_positions::Vector{SVector{Dim,Float64}}, medium::P, bd::BoundaryData) where {Dim,P<:PhysicalMedium{Dim}}
+function system_matrix(source_positions::Vector{SVector{Dim,Float64}}, medium::P, bd::BoundaryData; ω::Float64=2pi) where {Dim,P<:PhysicalMedium{Dim}}
 
     points = bd.boundary_points
 
     Ms = [
-        greens(bd.fieldtype, medium, points[i] - x, bd.outward_normals[i])    
+        greens(bd.fieldtype, medium, points[i] - x, bd.outward_normals[i]; ω=ω)    
     for i in eachindex(points), x in source_positions]
 
     return mortar(Ms)
@@ -83,7 +85,10 @@ function solve(sim::Simulation{TikhonovSolver{T}}) where T
 
     forcing = vcat(sim.boundary_data.fields...)
     forcing_particular = field(sim.medium, sim.boundary_data, sim.particular_solution)
-    forcing = forcing - vcat(forcing_particular...)
+
+    if sim.medium isa Elastostatic
+        forcing = forcing - vcat(forcing_particular...)
+    end
 
     # Tikinov solution
     condM = cond(M)

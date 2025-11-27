@@ -59,7 +59,12 @@ end
 # end
 
 function field(field_type::F, medium::P, psol::NoParticularSolution, x::AbstractVector, outward_normal::AbstractVector) where {F <: FieldType, P <: PhysicalMedium} 
-    return SVector(zero(x)...)
+    if medium isa Elastostatic
+        return SVector(zero(x)...)
+    else
+        return SVector([zeros(1) for i in 1:length(x)]...)
+    end
+    
 end
 
 function field(field_type::F, fsol::FundamentalSolution, x::AbstractVector, outward_normal::AbstractVector = ones(x |> length)) where F <: FieldType
