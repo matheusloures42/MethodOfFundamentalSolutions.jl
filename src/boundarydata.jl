@@ -29,7 +29,7 @@ Notes
 struct BoundaryData{F <: FieldType, Dim, FieldDim} <: Shape{Dim}
     fieldtype::F
     boundary_points::Vector{SVector{Dim,Float64}}
-    fields::Vector{SVector{FieldDim,Float64}}
+    fields::Vector{SVector{FieldDim,Union{Float64, ComplexF64}}}
     outward_normals::Vector{SVector{Dim,Float64}}
     interior_points::Vector{SVector{Dim,Float64}}
 end
