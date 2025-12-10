@@ -17,9 +17,6 @@ N_sources=N_bd;
 tolerance = 1e-10;
 res = 51;
 
-apply(x) = real(x)
-#apply(x) = imag(x)
-
 medium = Acoustic(2; ω = ω,  ρ = 1.0, c = 1.0)
 
 θs = LinRange(0,2pi,N_bd+1)[1:N_bd]
@@ -34,7 +31,6 @@ bd = BoundaryData(TractionType();
     outward_normals = normals,
     interior_points = interior_points
 )
-
 
 source_pos=source_positions(bd; relative_source_distance = 1.0)
 

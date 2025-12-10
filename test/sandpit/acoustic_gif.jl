@@ -10,7 +10,7 @@ r = 1.0;
 x0,y0 = 0.6,0.5;
 ω = 12.0;
 #ϕ(x, y) = exp(im *( ω / medium.c)  *x )
-ϕ(x, y) =hankelh1(0, (ω/medium.c) * sqrt((x-x0)^2 + (y-y0)^2))
+ϕ(x, y) = -(im / 4.0) * hankelh1(0, (ω/medium.c) * sqrt((x-x0)^2 + (y-y0)^2))
 
 rsource = 1.8;
 N_sources = 100;
