@@ -70,7 +70,7 @@ compute_Cx_analytical(x0_sensors_noisy_flat, init_source_positions, Σ_a, Σ_x_b
 
  ## Optimize the hyperparameters (source positions) using the analytical gradient of the log-marginal likelihood.
 
-best_source_positions = optimize_hyperparameters(
+best_source_positions = optimise_hyperparameters(
     g, 
     x0_sensors_noisy_flat, 
     Σ_a, 

@@ -165,7 +165,7 @@ end
 #Step 1: Hyperparameter Optimization.
 #Finds the best parameter vector chi (e.g., basis properties).
 
-function optimize_hyperparameters(
+function optimise_hyperparameters(
     g::AbstractVector, 
     xb_flat::AbstractVector, 
     Sigma_a::AbstractMatrix, 
@@ -180,7 +180,7 @@ function optimize_hyperparameters(
     return Optim.minimizer(res)
 end
 
-function optimize_hyperparameters(
+function optimise_hyperparameters(
     g::AbstractVector, 
     xb_flat::AbstractVector, 
     Sigma_a::AbstractMatrix, 
@@ -320,7 +320,7 @@ end
 
 
 # Overload for Hyperparameter (Source Position) Optimization
-function optimize_source_positions(
+function optimise_source_positions(
     sim::Simulation, 
     system_matrix_function::Function;
     gradient_system_matrix_function::Union{Function, Nothing} = nothing

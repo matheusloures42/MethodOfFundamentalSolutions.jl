@@ -132,13 +132,13 @@ function solve(
     sim::Simulation{<:BayesianSolver{<:GaussianPrior}},
     system_matrix_function::Function; 
     gradient_system_matrix_function::Union{Function, Nothing} = nothing,
-    optimize_source_positions_flag::Bool = false # Renamed flag slightly to avoid name clash with the function
+    optimise_source_positions_flag::Bool = false # Renamed flag slightly to avoid name clash with the function
 ) 
     
     # 1. Determine Source Positions (chi)
-    if optimize_source_positions_flag
+    if optimise_source_positions_flag
         println("Optimizing source positions...")
-        best_source_positions = optimize_source_positions(
+        best_source_positions = optimise_source_positions(
             sim, system_matrix_function; gradient_system_matrix_function = gradient_system_matrix_function
         )
     else
