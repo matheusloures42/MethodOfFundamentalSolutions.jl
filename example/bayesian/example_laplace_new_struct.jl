@@ -77,13 +77,15 @@ prior = GaussianPrior(prior_mean, Σ_a)
 # 4. Simulation Assembly & Solving
 # ==============================================================================
 # Define the physical medium (Assuming standard acoustic/laplace dummy medium)
-medium = MethodOfFundamentalSolutions.Acoustic(2; ρ=1.0, c=1.0) 
+medium = LaplaceMedium{2, Float64}()
+
+bayesian_solver = BayesianSolver(prior; optimise_source_positions_flag=true, use_greens_gradient_analytical_flag=true)
 
 # Package into Simulation
 sim = Simulation(
     medium, 
     bd; 
-    solver = BayesianSolver(prior),
+    solver = bayesian_solver,
     source_positions = init_source_positions,
     particular_solution = NoParticularSolution(),
     ω = 2pi * 1.0
@@ -91,12 +93,7 @@ sim = Simulation(
 
 # Call the clean solver API we built!
 println("Starting optimization and posterior computation...")
-sol = solve(
-    sim, 
-    laplace_M; 
-    gradient_system_matrix_function = laplace_grad_M, 
-    optimise_source_positions_flag = true
-)
+sol = solve(sim)
 
 # ==============================================================================
 # 5. Field Prediction & Verification
@@ -105,8 +102,11 @@ sol = solve(
 using MultipleScattering
 grid, idx = points_in_shape(Circle([0.0, 0.0], 1.0))
 points = grid[idx]
-points_flat = vcat(points...)
-best_source_positions_flat = vcat(sol.positions...)
+
+# Instantly flatten the arrays using reinterpret (zero-cost memory view)
+# and collect() to give you the standard Vector{Float64} you need
+points_flat = collect(reinterpret(Float64, points))
+best_source_positions_flat = collect(reinterpret(Float64, sol.positions))
 
 # Reconstruct the full field (using your existing utility function)
 mean_field, variance_field = reconstruct_full_field(

@@ -1,22 +1,41 @@
-
-
-abstract type FieldType end
-
 struct DirichletType <: FieldType end
 
 struct NeumannType <: FieldType end
 
-function greens(field::DirichletType, x::SVector{2,T}, outward_normal::AbstractVector{T} = zeros(T,2)) where T
-   
-    G = zeros(Complex{T},1,1)
-    G[1,1] = -1/(2π) * log(norm(x))
-    return G
+struct LaplaceMedium{Dim,T} <: PhysicalMedium{Dim, 1} end
+
+function greens(
+    field::DirichletType, 
+    medium::LaplaceMedium{2, T1},
+    x::SVector{2, T2}, 
+    outward_normal::SVector
+) where {T1, T2}
+    
+    # Calculate the purely real scalar value
+    val = -1 / (2π) * log(norm(x))
+    
+    # Return it wrapped in a 1x1 Static Matrix of type T
+    return SMatrix{1, 1, T2}(val)
 end
 
-"""
-Laplace M_func where hyperparameters (chi) are the 2D coordinates of the sources.
-"""
-function laplace_M(medium::P, x_flat::AbstractVector{T1}, chi::AbstractVector{T2}) where {P<:PhysicalMedium{2}, T1<:Real, T2<:Real}
+function greens_gradient(
+    field::DirichletType, 
+    medium::LaplaceMedium{2, T1}, 
+    x::SVector{2, T2}, 
+    outward_normal::SVector
+) where {T1, T2}
+    
+    r2 = x[1]^2 + x[2]^2 + 1e-12 
+    
+    grad_x = -T2(1) / T2(2π) * (x[1] / r2)
+    grad_y = -T2(1) / T2(2π) * (x[2] / r2)
+    
+   
+    return SVector{2, T2}(grad_x, grad_y)
+end
+
+
+function laplace_M(medium::P, x_flat::AbstractVector{T1}, chi::AbstractVector{T2}) where {P<:LaplaceMedium, T1<:Real, T2<:Real}
     # CRUCIAL FIX: Automatically resolve whether to use Float64 or ForwardDiff.Dual
     NumType = promote_type(eltype(x_flat), eltype(chi))
     
@@ -36,7 +55,7 @@ function laplace_M(medium::P, x_flat::AbstractVector{T1}, chi::AbstractVector{T2
             r_vec = x_sens - x_sour
             
             # This calls your greens signature, which handles NumType natively
-            G_complex_mat = greens(DirichletType(), r_vec)
+            G_complex_mat = greens(DirichletType(), medium, r_vec, zero(r_vec))
             
             M[i, j] = real(G_complex_mat[1, 1])
         end
@@ -50,7 +69,7 @@ Computes ∂M/∂x_sensor, where source locations are read from hyperparameter c
 Returns a 3D array of shape (n_sensors, n_sources, 2)
 """
 
-function laplace_grad_M(medium::P, x_flat::AbstractVector{T1}, chi::AbstractVector{T2}) where {P<:PhysicalMedium{2}, T1<:Real, T2<:Real}
+function laplace_grad_M(medium::P, x_flat::AbstractVector{T1}, chi::AbstractVector{T2}) where {P<:LaplaceMedium, T1<:Real, T2<:Real}
     # Apply the same type promotion logic here
     NumType = promote_type(eltype(x_flat), eltype(chi))
     

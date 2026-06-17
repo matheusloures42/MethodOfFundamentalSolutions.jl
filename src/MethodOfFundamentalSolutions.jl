@@ -3,7 +3,7 @@ module MethodOfFundamentalSolutions
 using Accessors
 using LinearAlgebra
 using BlockArrays: mortar
-using StaticArrays: SVector
+using StaticArrays: SVector, SMatrix
 using MultipleScattering
 using SpecialFunctions: hankelh1,besselj
 using Distributions
@@ -34,14 +34,14 @@ include("bayesian.jl")
 
 export Simulation, ParticularSolution, TikhonovSolver, NoParticularSolution # types
 export greens, source_positions
-export solve, system_matrix
+export solve, system_matrix, system_matrix_gradient
 include("solve.jl")
 
 export FieldResult, FundamentalSolution
 export field # types
 include("results.jl")
 
-export DisplacementType, TractionType, Elastostatic, Acoustic, DirichletType, NeumannType, laplace_M, laplace_grad_M # types and functions
+export DisplacementType ,TractionType, Elastostatic, Acoustic, LaplaceMedium, DirichletType, NeumannType, laplace_M, laplace_grad_M # types and functions
 export ParticularGravity # types
 include("physics/elastic.jl")
 include("physics/acoustic.jl")

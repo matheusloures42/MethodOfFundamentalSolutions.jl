@@ -41,8 +41,8 @@ function BoundaryData(field_type::F;
         fields::Vector{FV} = [p .* 0.0 for p in boundary_points],
         interior_points::Vector = [mean(boundary_points)],
         outward_normals::Vector = outward_normals(boundary_points,interior_points),
-        fields_covariance::Union{AbstractMatrix{Float64}, UniformScaling{Float64}} = I,
-        boundary_points_covariance::Union{AbstractMatrix{Float64}, UniformScaling{Float64}} = I,
+        fields_covariance::Union{AbstractMatrix{Float64}, UniformScaling{Float64}} = 0.0 * I,
+        boundary_points_covariance::Union{AbstractMatrix{Float64}, UniformScaling{Float64}} =0.0 * I,
     ) where {F <: FieldType, FV <: AbstractVector}
 
     Dim = length(boundary_points[1])

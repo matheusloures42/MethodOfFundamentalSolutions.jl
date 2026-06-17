@@ -46,9 +46,14 @@ Bayesian solver for MFS.
 - `prior::P`: The prior distribution for the solution
 The solution is the posterior distribution over the coefficients given the boundary data and the prior. 
 """
-
 struct BayesianSolver{P<:Prior} <: AbstractSolver
     prior::P
+    optimise_source_positions_flag::Bool 
+    use_greens_gradient_analytical_flag::Bool  
+end
+
+function BayesianSolver(prior::P; optimise_source_positions_flag::Bool = false, use_greens_gradient_analytical_flag::Bool = false) where {P<:Prior}
+    return BayesianSolver{P}(prior, optimise_source_positions_flag, use_greens_gradient_analytical_flag)
 end
 
 struct Simulation{S <: AbstractSolver, Dim, P<:PhysicalMedium{Dim}, PS <:ParticularSolution, BD <: BoundaryData}
@@ -76,15 +81,86 @@ end
 
 system_matrix(sim::Simulation) = system_matrix(sim.source_positions, sim.medium, sim.boundary_data)
 
-function system_matrix(source_positions::AbstractVector{SVector{Dim,T}}, medium::P, bd::BoundaryData) where {Dim,T,P<:PhysicalMedium{Dim}}
+function system_matrix(
+    source_positions::AbstractVector{<:SVector{Dim}}, 
+    medium::P, 
+    bd::BoundaryData
+) where {Dim, P<:PhysicalMedium{Dim}}
 
     points = bd.boundary_points
+    normals = bd.outward_normals
 
+    # The comprehension block automatically handles the return type
     Ms = [
-        greens(bd.fieldtype, medium, points[i] - x, bd.outward_normals[i])    
-    for i in eachindex(points), x in source_positions]
+        begin
+            # 1. This distance vector naturally promotes to Dual during optimization
+            r_vec = points[i] - x 
+            
+            # 2. Extract whatever type r_vec ended up being (Float64 or Dual)
+            NumType = eltype(r_vec) 
+            
+            # 3. Cast the boundary normal to perfectly match the Dual/Float64 type
+            normal_vec = SVector{Dim, NumType}(normals[i])
+            
+            # 4. Call greens. Now r_vec and normal_vec share the exact same type!
+            greens(bd.fieldtype, medium, r_vec, normal_vec)    
+        end
+        for i in eachindex(points), x in source_positions
+    ]
 
-    return mortar(Ms)
+    return Matrix(mortar(Ms))
+end
+
+function system_matrix_gradient(
+    source_positions::AbstractVector{<:SVector{Dim}}, 
+    medium::P, 
+    bd::BoundaryData
+) where {Dim, P<:PhysicalMedium{Dim}}
+
+    points = bd.boundary_points
+    normals = bd.outward_normals
+    
+    n_sensors = length(points)
+    n_sources = length(source_positions)
+
+    T_points = eltype(eltype(points))
+    T_sources = eltype(eltype(source_positions))
+    NumType = promote_type(T_points, T_sources)
+
+    # --- THE MAGIC: DYNAMIC ADAPTATION ---
+    # 1. Run a single test evaluation to see what the physics kernel outputs
+    r_vec_test = points[1] - source_positions[1]
+    normal_test = SVector{Dim, NumType}(normals[1])
+    G_sample = greens_gradient(bd.fieldtype, medium, r_vec_test, normal_test)
+    
+    # 2. Extract its exact data type and shape 
+    # Laplace will report shape `(2,)`. Elasticity might report `(2, 2)`.
+    OutType = eltype(G_sample)
+    out_shape = size(G_sample)
+
+    # 3. Preallocate an N-dimensional array using the exact shape reported!
+    # For Laplace, this builds an Array{OutType, 3} of size (N, M, 2).
+    # For Elasticity, it builds an Array{OutType, 4} of size (N, M, 2, 2).
+    grad_M = Array{OutType}(undef, n_sensors, n_sources, out_shape...)
+
+    # --- MATRIX ASSEMBLY ---
+    for j in 1:n_sources
+        x = source_positions[j]
+        for i in 1:n_sensors
+            r_vec = points[i] - x
+            normal_vec = SVector{Dim, NumType}(normals[i])
+            
+            # Evaluate the physics
+            G_grad = greens_gradient(bd.fieldtype, medium, r_vec, normal_vec)
+            
+            # CartesianIndices automatically iterates over whatever shape G_grad is!
+            for K in CartesianIndices(G_grad)
+                grad_M[i, j, K] = G_grad[K]
+            end
+        end
+    end
+
+    return grad_M
 end
 
 function solve(medium::P, bd::BoundaryData; kwargs... ) where P <: PhysicalMedium
@@ -125,25 +201,33 @@ function solve(sim::Simulation{TikhonovSolver{T}}) where T
 end
 
 function solve(
-    sim::Simulation{<:BayesianSolver{<:GaussianPrior}, Dim},
-    system_matrix_function::Function; 
-    gradient_system_matrix_function::Union{Function, Nothing} = nothing,
-    optimise_source_positions_flag::Bool = false # Renamed flag slightly to avoid name clash with the function
-) where {Dim}
+    sim::Simulation{<:BayesianSolver{<:GaussianPrior}, Dim}
+    ) where {Dim}
     
     # 1. Determine Source Positions (chi)
-    if optimise_source_positions_flag
+    if sim.solver.optimise_source_positions_flag
         println("Optimizing source positions...")
         best_source_positions = optimise_source_positions(
-            sim, system_matrix_function; gradient_system_matrix_function = gradient_system_matrix_function
+            sim, system_matrix; gradient_system_matrix_function = system_matrix_gradient
         )
     else
         best_source_positions = vcat(sim.source_positions...)
     end
 
     # 2. Compute Posterior Coefficients
+    if sim.solver.use_greens_gradient_analytical_flag
+        println("Using analytical gradient of the system matrix for posterior computation...")
+        μ_post, Σ_post = compute_coefficient_posterior(
+            sim, best_source_positions, system_matrix; gradient_system_matrix_function = system_matrix_gradient
+        )
+    else
+        println("Using finite difference approximation of the system matrix gradient for posterior computation...")
+        μ_post, Σ_post = compute_coefficient_posterior(
+            sim, best_source_positions, system_matrix; gradient_system_matrix_function = nothing
+        )
+    end
     μ_post, Σ_post = compute_coefficient_posterior(
-        sim, best_source_positions, system_matrix_function; gradient_system_matrix_function = gradient_system_matrix_function
+        sim, best_source_positions, system_matrix; gradient_system_matrix_function = system_matrix_gradient
     )
     new_source_positions = [
     SVector{Dim, Float64}(best_source_positions[i : i + Dim - 1]) 

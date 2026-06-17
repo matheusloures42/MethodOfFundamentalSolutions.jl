@@ -21,7 +21,7 @@ function FundamentalSolution(medium::P;
         particular_solution::PS = NoParticularSolution(),
         positions::Vector{<:AbstractVector} = [zeros(Float64,spatial_dimension(medium))],
         coefficients::AbstractVector = [one(Float64)],
-        coefficients_covariance::Union{AbstractMatrix{Float64}, UniformScaling{Float64}} = 0*I,
+        coefficients_covariance::Union{AbstractMatrix{Float64}, UniformScaling{Float64}} = 0.0*I,
         relative_boundary_error = zero(Float64)
     ) where {P<:PhysicalMedium, PS <: ParticularSolution}
     
