@@ -46,13 +46,13 @@ Bayesian solver for MFS.
 - `prior::P`: The prior distribution for the solution
 The solution is the posterior distribution over the coefficients given the boundary data and the prior. 
 """
-struct BayesianSolver{P<:Prior} <: AbstractSolver
+struct BayesianSolver{P<:ProbabilityDistribution} <: AbstractSolver
     prior::P
     optimise_source_positions_flag::Bool 
     use_greens_gradient_analytical_flag::Bool  
 end
 
-function BayesianSolver(prior::P; optimise_source_positions_flag::Bool = false, use_greens_gradient_analytical_flag::Bool = false) where {P<:Prior}
+function BayesianSolver(prior::P; optimise_source_positions_flag::Bool = false, use_greens_gradient_analytical_flag::Bool = false) where {P<:ProbabilityDistribution}
     return BayesianSolver{P}(prior, optimise_source_positions_flag, use_greens_gradient_analytical_flag)
 end
 
@@ -201,7 +201,7 @@ function solve(sim::Simulation{TikhonovSolver{T}}) where T
 end
 
 function solve(
-    sim::Simulation{<:BayesianSolver{<:GaussianPrior}, Dim}
+    sim::Simulation{<:BayesianSolver{<:GaussianDistribution}, Dim}
     ) where {Dim}
     
     # 1. Determine Source Positions (chi)

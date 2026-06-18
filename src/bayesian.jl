@@ -1,13 +1,13 @@
 # Bayesian Inference Routines for MFS Inverse Problems.
 # Defining prior type 
-abstract type Prior end
+abstract type ProbabilityDistribution end
 
-struct GaussianPrior{Dim, FieldDim} <: Prior
+struct GaussianDistribution{Dim, FieldDim} <: ProbabilityDistribution
     mean::Vector{SVector{Dim,Float64}}
     covariance::Union{AbstractMatrix{Float64}, UniformScaling{Float64}}
 end
 
-function GaussianPrior(
+function GaussianDistribution(
     mean::Vector{<:AbstractVector{<:Real}},
     covariance::Union{AbstractMatrix{Float64}, UniformScaling{Float64}}
 )
@@ -15,7 +15,20 @@ function GaussianPrior(
 
     mean_svec = [SVector{Dim}(v) for v in mean]
 
-    GaussianPrior{Dim, length(mean)}(mean_svec, covariance)
+    GaussianDistribution{Dim, length(mean)}(mean_svec, covariance)
+end
+
+function Distributions.MvNormal(dist::GaussianDistribution)
+    # 1. Flatten the mean: MvNormal requires a 1D Vector, not a Vector of SVectors
+    flat_mean = vcat(dist.mean...)
+    
+    # 2. Wrap the covariance in a PDMat to satisfy Distributions.jl
+    # This handles both dense matrices and UniformScaling (diagonal/isotropic)
+    pd_cov = isa(dist.covariance, UniformScaling) ? 
+             PDMat(dist.covariance.λ * I(length(flat_mean))) : 
+             PDMat(dist.covariance)
+             
+    return MvNormal(flat_mean, pd_cov)
 end
 
 #Helper function to compute the matrix (Cx).

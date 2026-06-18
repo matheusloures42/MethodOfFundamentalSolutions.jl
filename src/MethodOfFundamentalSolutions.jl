@@ -11,6 +11,7 @@ using ForwardDiff
 using Optim
 using ADTypes
 using Plots
+using PDMats
 
 import MultipleScattering: PhysicalMedium, ScalarMedium, spatial_dimension, field_dimension, Shape, Box, bounding_box, points_in_shape, cartesian_to_radial_coordinates, radial_to_cartesian_transform, cartesian_to_radial_transform, field
 export cartesian_to_radial_coordinates, radial_to_cartesian_transform, cartesian_to_radial_transform
@@ -29,7 +30,7 @@ export interior_points_along_coordinate, flat_to_pos_matrix
 include("utils.jl")
 
 export log_marginal_likelihood, optimise_hyperparameters, compute_coefficient_posterior, reconstruct_full_field, compute_Cx, compute_Cx_analytical # Bayesian functions
-export Prior, GaussianPrior, BayesianSolver # Prior types
+export ProbabilityDistribution, GaussianDistribution, BayesianSolver # Prior types
 include("bayesian.jl")
 
 export Simulation, ParticularSolution, TikhonovSolver, NoParticularSolution # types
@@ -46,9 +47,6 @@ export ParticularGravity # types
 include("physics/elastic.jl")
 include("physics/acoustic.jl")
 include("physics/laplace.jl")
-
-
-export  plot_reconstructed_fields_mean, plot_reconstructed_fields_variance, plot_reconstructed_fields
 include("../plot/plot.jl")
 
 

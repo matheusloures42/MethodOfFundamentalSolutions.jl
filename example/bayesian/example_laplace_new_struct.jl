@@ -71,7 +71,7 @@ init_source_positions = [SVector{2, Float64}(2.0*cos(θ), 2.0*sin(θ)) for θ in
 
 # Create the Gaussian prior for the coefficients
 prior_mean = [SVector{1, Float64}(0.0) for _ in 1:n_sources]
-prior = GaussianPrior(prior_mean, Σ_a)
+prior = GaussianDistribution(prior_mean, Σ_a)
 
 # ==============================================================================
 # 4. Simulation Assembly & Solving
@@ -114,10 +114,6 @@ field_predict = FieldResult(grid, [field_mat[i] for i in eachindex(field_mat)]);
 
 
 p1 = plot(field_predict, field_apply = first, title = "Predicted Field")
-plot!(sim)
-
-
-plot(p1, p2, layout = (1, 2), size = (800, 400))
 
 covs= [
     field_covariance(DirichletType(), sol, x, x / norm(x)) 
@@ -132,6 +128,6 @@ std_mat[idx] = [[stds[i][1]] for i in eachindex(stds)];
 
 std_predict = FieldResult(grid, [std_mat[i] for i in eachindex(std_mat)]);
 
-p2 = plot(std_predict, field_apply = first, title = "Standard Deviation")
+p2 = plot(std_predict, field_apply = first, title = "Standard Deviation", colormap = :inferno)
 
 plot(p1, p2, layout = (1, 2), size = (800, 400))
