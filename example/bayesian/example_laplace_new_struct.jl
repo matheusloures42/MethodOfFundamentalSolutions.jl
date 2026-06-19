@@ -3,9 +3,8 @@ using MethodOfFundamentalSolutions
 using Plots
 using Distributions
 using StaticArrays
-using Accessors
 using LinearAlgebra
-using ForwardDiff
+
 
 # include("../../src/bayesian.jl")
 # include("../../src/physics/laplace.jl")
@@ -114,7 +113,7 @@ field_predict = FieldResult(grid, [field_mat[i] for i in eachindex(field_mat)]);
 
 
 p1 = plot(field_predict, field_apply = first, title = "Predicted Field")
-
+plot!(sol)
 covs= [
     field_covariance(DirichletType(), sol, x, x / norm(x)) 
 for x in points]
@@ -130,4 +129,7 @@ std_predict = FieldResult(grid, [std_mat[i] for i in eachindex(std_mat)]);
 
 p2 = plot(std_predict, field_apply = first, title = "Standard Deviation", colormap = :inferno)
 
+plot!(sol)
+
 plot(p1, p2, layout = (1, 2), size = (800, 400))
+
