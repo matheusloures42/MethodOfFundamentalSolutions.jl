@@ -346,6 +346,92 @@ function optimise_source_positions(
     end
 end
 
+function construct_prior(
+    sim
+)
+    # 1. Extract all current components from the simulation
+    g, xb_flat, init_chi, Σ_a_init, Σ_sensor, Σ_x = _extract_bayesian_components(sim)
+    
+    # 2. Build the physics closures
+    physics_matrix = _build_physics_closure(
+        system_matrix, sim, xb_flat, init_chi
+    )
+    
+    if sim.solver.use_greens_gradient_analytical_flag
+        physics_gradient = _build_physics_closure(system_matrix_gradient, sim, xb_flat, init_chi)
+    else
+        physics_gradient = nothing
+    end
+    
+    # 3. Extract initial diagonal variances from the MvNormal prior
+    # We add a tiny nugget (1e-12) to prevent log(0) if the initial variance is strictly zero
+    init_variances = diag(Σ_a_init)
+    init_omega = log.(init_variances .+ 1e-12) 
+    
+    # 4. Concatenate into a single master parameter vector
+    theta_init = [init_chi; init_omega]
+    n_chi = length(init_chi)
+    
+    # 5. Define the joint objective function
+    function joint_obj(theta)
+        # Unpack the master vector
+        chi_current = theta[1:n_chi]
+        omega_current = theta[n_chi+1:end]
+        
+        # Reconstruct the strictly positive diagonal covariance matrix
+        Sigma_a_current = Diagonal(exp.(omega_current))
+        
+        # Call the appropriate typed log_marginal_likelihood
+        if isnothing(physics_gradient)
+            return log_marginal_likelihood(
+                chi_current, g, xb_flat, Sigma_a_current, Σ_sensor, Σ_x, physics_matrix
+            )
+        else
+            return log_marginal_likelihood(
+                chi_current, g, xb_flat, Sigma_a_current, Σ_sensor, Σ_x, physics_matrix, physics_gradient
+            )
+        end
+    end
+    
+    # 6. Run the joint optimization
+    # Note: If you want to use ForwardDiff, change to LBFGS(), autodiff=AutoForwardDiff()
+    res = optimize(joint_obj, Vector(theta_init), LBFGS())
+    theta_opt = Optim.minimizer(res)
+    
+    # 7. Unpack the optimized results
+    chi_opt = theta_opt[1:n_chi]
+
+    chi_opt_matrix=reshape(chi_opt, 2, :)
+
+    chi_opt=[chi_opt_matrix[:,i] for i in 1:size(chi_opt_matrix,2)]
+
+    omega_opt = theta_opt[n_chi+1:end]
+    
+    # 8. Reconstruct the optimized MvNormal prior
+    opt_variances = exp.(omega_opt)
+    opt_prior = MvNormal(zeros(length(opt_variances)), Diagonal(opt_variances))
+    
+    # 9. Create the updated BayesianSolver
+    opt_solver = BayesianSolver(
+        opt_prior; 
+        optimise_source_positions_flag = sim.solver.optimise_source_positions_flag,
+        use_greens_gradient_analytical_flag = sim.solver.use_greens_gradient_analytical_flag
+    )
+    
+    opt_sim = Simulation(
+    sim.medium, 
+    sim.boundary_data; 
+    solver =opt_solver,
+    source_positions = chi_opt,
+    particular_solution = NoParticularSolution(),
+    ω = 2pi * 1.0
+    )
+
+
+    return opt_sim
+end
+
+
 function compute_coefficient_posterior(
     sim, 
     chi::AbstractVector, 

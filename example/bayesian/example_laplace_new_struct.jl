@@ -1,7 +1,6 @@
 using MethodOfFundamentalSolutions
 using Plots
 using Distributions
-using StaticArrays
 using LinearAlgebra
 
 # Assuming your module exports or includes these types:
@@ -95,8 +94,6 @@ sim = Simulation(
     ω = 2pi * 1.0
 )
 
-# Call the clean solver API we built!
-println("Starting optimization and posterior computation...")
 sol = solve(sim)
 
 # ==============================================================================
@@ -118,7 +115,7 @@ field_predict = FieldResult(grid, [field_mat[i] for i in eachindex(field_mat)]);
 
 
 p1 = plot(field_predict, field_apply = first, title = "Predicted Field")
-plot(sol)
+plot!(sol)
 covs= [
     field_covariance(DirichletType(), sol, x, x / norm(x)) 
 for x in points]
@@ -134,7 +131,74 @@ std_predict = FieldResult(grid, [std_mat[i] for i in eachindex(std_mat)]);
 
 p2 = plot(std_predict, field_apply = first, title = "Standard Deviation", colormap = :inferno)
 
-plot(sol)
+
 
 plot(p1, p2, layout = (1, 2), size = (800, 400))
 
+plot(sol)
+
+
+# ==============================================================================
+# 6. If you want to optimise the prior and source positions simulataneously, you can call:
+# ==============================================================================
+solver_2 = BayesianSolver(
+    prior;
+    optimise_source_positions_flag = false,
+    use_greens_gradient_analytical_flag = true
+)
+
+sim_2 = Simulation(
+    medium, 
+    bd; 
+    solver =solver_2,
+    source_positions = init_source_positions,
+    particular_solution = NoParticularSolution(),
+    ω = 2pi * 1.0
+)
+
+
+opt_sim= construct_prior(sim_2)
+
+opt_sol = solve(opt_sim)
+
+
+# ==============================================================================
+# 5. Field Prediction 
+# ==============================================================================
+# Get points inside the unit disk for field prediction
+using MultipleScattering
+grid, idx = points_in_shape(Circle([0.0, 0.0], 1.0))
+points = grid[idx]
+
+fs = [
+    field(DirichletType(), opt_sol, x, x / norm(x)) 
+for x in points];
+    
+field_mat = [[0.0] for x in grid]
+field_mat[idx] = [[fs[i][1]] for i in eachindex(fs)];
+
+field_predict = FieldResult(grid, [field_mat[i] for i in eachindex(field_mat)]);
+
+
+p1 = plot(field_predict, field_apply = first, title = "Predicted Field")
+plot!(opt_sol)
+covs= [
+    field_covariance(DirichletType(), opt_sol, x, x / norm(x)) 
+for x in points]
+
+stds = [
+    field_std(DirichletType(), opt_sol, x, x / norm(x))
+        for x in points]
+
+std_mat = [[0.0] for x in grid]
+std_mat[idx] = [[stds[i][1]] for i in eachindex(stds)];
+
+std_predict = FieldResult(grid, [std_mat[i] for i in eachindex(std_mat)]);
+
+p2 = plot(std_predict, field_apply = first, title = "Standard Deviation", colormap = :inferno)
+
+
+
+plot(p1, p2, layout = (1, 2), size = (800, 400))
+
+plot(opt_sol)
