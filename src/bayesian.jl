@@ -117,7 +117,7 @@ function geometric_covariance(
         end
         
         Cx = zeros(T, N, N)
-        is_full_sigma = size(Sigma_x_input, 1) == n_xb
+        is_full_sigma = (Sigma_x_input isa AbstractMatrix) && size(Sigma_x_input, 1) == n_xb
         
         for r in 1:N, s in 1:N
             i = div(r - 1, d_m) + 1
