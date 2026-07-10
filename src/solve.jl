@@ -37,6 +37,35 @@ struct TikhonovSolver{T<:Real} <: AbstractSolver
     end
 end
 
+"""
+    BayesianSolver{T<:Real} <: AbstractSolver
+
+Bayesian solver for MFS.
+
+# Parameters
+- `prior::P`: The prior distribution for the solution
+The solution is the posterior distribution over the coefficients given the boundary data and the prior. 
+"""
+struct BayesianSolver{P<:ContinuousMultivariateDistribution} <: AbstractSolver
+    prior::P
+    optimise_source_positions_flag::Bool 
+    use_greens_gradient_analytical_flag::Bool
+    gradient_tol::Float64
+    objective_function_tol::Float64
+    max_iters::Int  
+end
+
+function BayesianSolver(
+    prior::ContinuousMultivariateDistribution; 
+    optimise_source_positions_flag::Bool = false, 
+    use_greens_gradient_analytical_flag::Bool = true,
+    gradient_tol::Float64 = 1e-3,
+    objective_function_tol::Float64 = 1e-4,
+    max_iters::Int = 50
+)
+    return BayesianSolver{typeof(prior)}(prior, optimise_source_positions_flag, use_greens_gradient_analytical_flag, gradient_tol, objective_function_tol, max_iters)
+end
+
 struct Simulation{S <: AbstractSolver, Dim, P<:PhysicalMedium{Dim}, PS <:ParticularSolution, BD <: BoundaryData}
     solver::S
     medium::P
@@ -62,16 +91,105 @@ end
 
 system_matrix(sim::Simulation) = system_matrix(sim.source_positions, sim.medium, sim.boundary_data)
 
-function system_matrix(source_positions::Vector{SVector{Dim,Float64}}, medium::P, bd::BoundaryData) where {Dim,P<:PhysicalMedium{Dim}}
+function system_matrix(
+    source_positions::AbstractVector{<:SVector{Dim}}, 
+    medium::P, 
+    bd::BoundaryData
+) where {Dim, P<:PhysicalMedium{Dim}}
 
-    points = bd.boundary_points
+    points = bd.boundary_points isa AbstractMvNormal ? 
+          struct_points(bd.boundary_points, Dim) : 
+          bd.boundary_points
+    normals = bd.outward_normals
 
+    # The comprehension block automatically handles the return type
     Ms = [
-        greens(bd.fieldtype, medium, points[i] - x, bd.outward_normals[i])    
-    for i in eachindex(points), x in source_positions]
+        begin
+            # 1. This distance vector naturally promotes to Dual during optimization
+            r_vec = points[i] - x 
+            
+            # 2. Extract whatever type r_vec ended up being (Float64 or Dual)
+            NumType = eltype(r_vec) 
+            
+            # 3. Cast the boundary normal to perfectly match the Dual/Float64 type
+            normal_vec = SVector{Dim, NumType}(normals[i])
+            
+            # 4. Call greens. Now r_vec and normal_vec share the exact same type!
+            greens(bd.fieldtype, medium, r_vec, normal_vec)    
+        end
+        for i in eachindex(points), x in source_positions
+    ]
 
-    return mortar(Ms)
+    return Matrix(mortar(Ms))
 end
+
+
+function system_matrix_gradient(
+    source_positions::AbstractVector{<:SVector{Dim}}, 
+    medium::P, 
+    bd::BoundaryData
+) where {Dim, P<:PhysicalMedium{Dim}}
+
+    points = bd.boundary_points isa AbstractMvNormal ? 
+          struct_points(bd.boundary_points, Dim) : 
+          bd.boundary_points
+          
+    normals = bd.outward_normals
+    
+    n_sensors = length(points)
+    n_sources = length(source_positions)
+
+    T_points = eltype(eltype(points))
+    T_sources = eltype(eltype(source_positions))
+    NumType = promote_type(T_points, T_sources)
+
+    # 1. Run test evaluation
+    r_vec_test = points[1] - source_positions[1]
+    normal_test = SVector{Dim, NumType}(normals[1])
+    G_sample = greens_gradient(bd.fieldtype, medium, r_vec_test, normal_test)
+    
+    out_shape = size(G_sample)
+
+    # 2. Dynamically determine Degrees of Freedom (DOF) based on kernel shape
+    d_m_out = length(out_shape) == 1 ? 1 : out_shape[1]
+    d_m_in  = length(out_shape) == 1 ? 1 : out_shape[2]
+    
+    N = n_sensors * d_m_out
+    K = n_sources * d_m_in
+
+    # 3. Preallocate the flattened (N, K, Dim) array using the statically known NumType
+    grad_M = zeros(NumType, N, K, Dim)
+    
+    # --- MATRIX ASSEMBLY ---
+    for j in 1:n_sources
+        x = source_positions[j]
+        for i in 1:n_sensors
+            r_vec = points[i] - x
+            normal_vec = SVector{Dim, NumType}(normals[i])
+            
+            G_grad = greens_gradient(bd.fieldtype, medium, r_vec, normal_vec)
+            
+            # 4. Map local tensor to global flat indices
+            if length(out_shape) == 1
+                # Scalar physics (Laplace)
+                for k in 1:Dim
+                    grad_M[i, j, k] = G_grad[k]
+                end
+            else
+                # Matrix/Tensor physics (Elasticity)
+                for i_ch in 1:d_m_out, j_ch in 1:d_m_in, k in 1:Dim
+                    row = d_m_out * (i - 1) + i_ch
+                    col = d_m_in  * (j - 1) + j_ch
+                    grad_M[row, col, k] = G_grad[i_ch, j_ch, k]
+                end
+            end
+        end
+    end
+
+    return grad_M
+end
+
+system_matrix_gradient(sim::Simulation) = system_matrix_gradient(sim.source_positions, sim.medium, sim.boundary_data)
 
 function solve(medium::P, bd::BoundaryData; kwargs... ) where P <: PhysicalMedium
     sim = Simulation(medium, bd; kwargs...)
@@ -87,7 +205,6 @@ function solve(sim::Simulation{TikhonovSolver{T}}) where T
     forcing_particular = field(sim.medium, sim.boundary_data, sim.particular_solution)
     forcing = forcing - vcat(forcing_particular...)
     
-
     # Tikinov solution
     condM = cond(M)
     sqrtλ = if sim.solver.λ < zero(eltype(sim.solver.λ)) 
@@ -109,6 +226,38 @@ function solve(sim::Simulation{TikhonovSolver{T}}) where T
         relative_boundary_error = relative_error
     )
 end
+
+function solve(
+    sim::Simulation{<:BayesianSolver{<:AbstractMvNormal}, Dim}
+    ) where {Dim}
+    
+    # 1. Determine Source Positions (chi)
+    if sim.solver.optimise_source_positions_flag
+        println("Optimizing source positions...")
+        best_source_positions = optimise_source_positions(sim)
+    else
+        best_source_positions = vcat(sim.source_positions...)
+    end
+
+    # 2. Compute Posterior Coefficients
+    μ_post, Σ_post = compute_coefficient_posterior(
+            sim, best_source_positions
+        )
+    
+    new_source_positions = [
+    SVector{Dim, Float64}(best_source_positions[i : i + Dim - 1]) 
+    for i in 1:Dim:length(best_source_positions)
+    ]
+    # 3. Return the solution
+    return FundamentalSolution(
+        sim.medium; 
+        positions = new_source_positions,
+        coefficients = μ_post, 
+        coefficients_covariance = Σ_post,
+        particular_solution = sim.particular_solution
+    )
+end
+
 
 """
     source_positions(cloud::BoundaryData; α=1.0)

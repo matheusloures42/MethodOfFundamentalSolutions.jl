@@ -36,3 +36,4 @@ function interior_points_along_coordinate(points; offset_percent = 0.1,
 
     return interior_points
 end
+
